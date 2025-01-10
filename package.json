@@ -1,10 +1,10 @@
 {
-  "name": "prisma-kysely",
+  "name": "@arthurfiorette/prisma-kysely",
   "description": "Generate Kysely database types from a Prisma schema",
   "repository": {
     "url": "https://github.com/valtyr/prisma-kysely"
   },
-  "version": "1.8.0",
+  "version": "1.9.1",
   "main": "dist/generator.js",
   "files": [
     "dist"
