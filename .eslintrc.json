@@ -3,7 +3,7 @@
   "parserOptions": {
     "project": "./tsconfig.json"
   },
-  "ignorePatterns": ["prisma/**/*.ts", "*.test.ts"],
+  "ignorePatterns": ["prisma/**/*.ts", "*.test.ts", "vitest.config.ts"],
   "plugins": ["@typescript-eslint"],
   "extends": ["plugin:@typescript-eslint/recommended"],
   "rules": {
