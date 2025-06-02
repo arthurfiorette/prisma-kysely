@@ -37,13 +37,17 @@ export const convertToMultiSchemaModels = <const T extends ModelLike>(
       return [];
     }
 
+    // If the schema is the default schema, we don't need to modify the model
+    if (schemaName === defaultSchema) {
+      return model;
+    }
+
     return [
       {
         ...model,
-        typeName:
-          groupBySchema && schemaName !== defaultSchema
-            ? `${capitalize(schemaName)}.${model.typeName}`
-            : model.typeName,
+        typeName: groupBySchema
+          ? `${capitalize(schemaName)}.${model.typeName}`
+          : model.typeName,
         tableName: model.tableName
           ? `${schemaName}.${model.tableName}`
           : undefined,
