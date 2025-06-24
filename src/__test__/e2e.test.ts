@@ -155,7 +155,7 @@ test("End to end test - separate entrypoints", { timeout: 20000 }, async () => {
     encoding: "utf-8",
   });
   expect(typeFile).not.toContain("export const");
-  expect(typeFile).toContain(`import type { TestEnum } from "./enums";`);
+  expect(typeFile).toContain(`import type { TestEnum } from "./enums.js";`);
 
   const enumFile = await fs.readFile("./prisma/generated/enums.ts", {
     encoding: "utf-8",
