@@ -10,3 +10,4 @@ prisma
 prisma-old
 src/generated/prisma
 yarn-error.log
+/src/generated/prisma

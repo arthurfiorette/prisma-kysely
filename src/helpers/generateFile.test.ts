@@ -10,12 +10,12 @@ test("generates a file!", () => {
   expect(resultwithLeader).toContain('from "kysely";');
 
   const resultwithEnumImport = generateFile([], {
-    withEnumImport: { importPath: "./enums", names: ["Foo", "Bar"] },
+    withEnumImport: { importPath: "./enums.ts", names: ["Foo", "Bar"] },
     withLeader: false,
   });
 
   expect(resultwithEnumImport).toContain(
-    'import type { Foo, Bar } from "./enums";'
+    'import type { Foo, Bar } from "./enums.ts";'
   );
   expect(resultwithEnumImport).not.toContain('from "kysely";');
 });
