@@ -48,13 +48,37 @@ export function generateFiles(opts: {
     return [typesFileWithEnums];
   }
 
+  const nearestTsconfig = ts.findConfigFile(
+    process.cwd(),
+    ts.sys.fileExists,
+    "tsconfig.json"
+  );
+
+  const { config, error: tsconfigReadError } = nearestTsconfig
+    ? ts.readConfigFile(nearestTsconfig, ts.sys.readFile)
+    : ({ config: undefined, error: undefined } as {
+        config?: ts.ParsedTsconfig;
+        error?: ts.Diagnostic;
+      });
+
+  if (tsconfigReadError) {
+    throw new Error(
+      `TS${tsconfigReadError.code}: ${tsconfigReadError.messageText} - ${tsconfigReadError.file}`
+    );
+  }
+
+  const doesAllowTsExtensions =
+    config?.compilerOptions?.allowImportingTsExtensions === true;
+
+  const extension = doesAllowTsExtensions ? ".ts" : ".js";
+
   const typesFileWithoutEnums: File = {
     filepath: opts.typesOutfile,
     content: generateFile(
       [...opts.models.map((m) => m.definition), opts.databaseType],
       {
         withEnumImport: {
-          importPath: `./${path.parse(opts.enumsOutfile).name}`,
+          importPath: `./${path.parse(opts.enumsOutfile).name}${extension}`,
           names: opts.enumNames,
         },
         withLeader: true,
