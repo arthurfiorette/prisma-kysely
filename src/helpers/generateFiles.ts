@@ -1,3 +1,4 @@
+import { getTsconfig } from "get-tsconfig";
 import path from "node:path";
 import type { TypeAliasDeclaration } from "typescript";
 import ts from "typescript";
@@ -48,29 +49,8 @@ export function generateFiles(opts: {
     return [typesFileWithEnums];
   }
 
-  const nearestTsconfig = ts.findConfigFile(
-    process.cwd(),
-    ts.sys.fileExists,
-    "tsconfig.json"
-  );
-
-  const { config, error: tsconfigReadError } = nearestTsconfig
-    ? ts.readConfigFile(nearestTsconfig, ts.sys.readFile)
-    : ({ config: undefined, error: undefined } as {
-        config?: ts.ParsedTsconfig;
-        error?: ts.Diagnostic;
-      });
-
-  if (tsconfigReadError) {
-    throw new Error(
-      `TS${tsconfigReadError.code}: ${tsconfigReadError.messageText} - ${tsconfigReadError.file}`
-    );
-  }
-
-  const doesAllowTsExtensions =
-    config?.compilerOptions?.allowImportingTsExtensions === true;
-
-  const extension = doesAllowTsExtensions ? ".ts" : ".js";
+  const allowImportingTsExtensions =
+    getTsconfig()?.config.compilerOptions?.allowImportingTsExtensions === true;
 
   const typesFileWithoutEnums: File = {
     filepath: opts.typesOutfile,
@@ -78,7 +58,7 @@ export function generateFiles(opts: {
       [...opts.models.map((m) => m.definition), opts.databaseType],
       {
         withEnumImport: {
-          importPath: `./${path.parse(opts.enumsOutfile).name}${extension}`,
+          importPath: `./${path.parse(opts.enumsOutfile).name}${allowImportingTsExtensions ? ".ts" : ".js"}`,
           names: opts.enumNames,
         },
         withLeader: true,
