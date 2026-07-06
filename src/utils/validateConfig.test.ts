@@ -38,6 +38,21 @@ test("rejects invalid schemaGrouping values", () => {
   expect(result.success).toEqual(false);
 });
 
+test("defaults enumArrayType to array", () => {
+  const result = configValidator.parse({ databaseProvider: "postgresql" });
+
+  expect(result.enumArrayType).toEqual("array");
+});
+
+test("rejects invalid enumArrayType values", () => {
+  const result = configValidator.safeParse({
+    databaseProvider: "postgresql",
+    enumArrayType: "literal",
+  });
+
+  expect(result.success).toEqual(false);
+});
+
 test("maps legacy groupBySchema to namespace schemaGrouping", () => {
   const result = configValidator.parse({
     databaseProvider: "postgresql",

@@ -53,6 +53,9 @@ export const configValidator = z
     // How schema groups should be emitted.
     schemaGrouping: z.enum(["none", "namespace", "exports"]).optional(),
 
+    // How enum array columns should be typed.
+    enumArrayType: z.enum(["array", "string"]).default("array"),
+
     // Which schema should not be wrapped in a namespace
     defaultSchema: z.string().default("public"),
 

@@ -97,6 +97,7 @@ test("it generates a model!", () => {
       readOnlyIds: false,
       groupBySchema: false,
       schemaGrouping: "none",
+      enumArrayType: "array",
       defaultSchema: "public",
       dbTypeName: "DB",
       importExtension: "",
@@ -166,6 +167,7 @@ test("it respects camelCase option", () => {
       readOnlyIds: false,
       groupBySchema: false,
       schemaGrouping: "none",
+      enumArrayType: "array",
       defaultSchema: "public",
       dbTypeName: "DB",
       importExtension: "",
@@ -188,7 +190,7 @@ test("it respects camelCase option", () => {
 };`);
 });
 
-test("it types enum arrays as strings (#107)", () => {
+test("it types enum arrays as enum arrays by default", () => {
   const model = generateModel(
     {
       name: "User",
@@ -244,6 +246,7 @@ test("it types enum arrays as strings (#107)", () => {
       readOnlyIds: false,
       groupBySchema: false,
       schemaGrouping: "none",
+      enumArrayType: "array",
       defaultSchema: "public",
       dbTypeName: "DB",
       importExtension: "",
@@ -257,12 +260,60 @@ test("it types enum arrays as strings (#107)", () => {
 
   const source = stringifyTsNode(model.definition);
 
-  // A plain enum field keeps its enum type; an enum array becomes `string`
-  // because Postgres returns it as a raw array literal string ("{FOO,BAR}")
-  // that the pg driver doesn't parse for user-defined enum array types.
   expect(source).toEqual(`export type User = {
     id: string;
     role: Role;
+    permissions: Permission[];
+};`);
+});
+
+test("it can type enum arrays as strings for raw pg enum arrays (#107)", () => {
+  const model = generateModel(
+    {
+      name: "User",
+      fields: [
+        {
+          name: "permissions",
+          isId: false,
+          isGenerated: false,
+          kind: "enum",
+          type: "Permission",
+          hasDefaultValue: false,
+          isList: true,
+          isReadOnly: false,
+          isRequired: true,
+          isUnique: false,
+        },
+      ],
+      schema: null,
+      primaryKey: null,
+      dbName: null,
+      uniqueFields: [],
+      uniqueIndexes: [],
+    },
+    {
+      databaseProvider: "postgresql",
+      fileName: "",
+      enumFileName: "",
+      camelCase: false,
+      readOnlyIds: false,
+      groupBySchema: false,
+      schemaGrouping: "none",
+      enumArrayType: "string",
+      defaultSchema: "public",
+      dbTypeName: "DB",
+      importExtension: "",
+      exportWrappedTypes: false,
+    },
+    {
+      schemaGrouping: "none",
+      defaultSchema: "public",
+    }
+  );
+
+  const source = stringifyTsNode(model.definition);
+
+  expect(source).toEqual(`export type User = {
     permissions: string;
 };`);
 });
@@ -299,6 +350,7 @@ test("it records missing-schema enum references as default schema references", (
       readOnlyIds: false,
       groupBySchema: false,
       schemaGrouping: "exports",
+      enumArrayType: "array",
       defaultSchema: "public",
       dbTypeName: "DB",
       importExtension: "",
@@ -316,5 +368,61 @@ test("it records missing-schema enum references as default schema references", (
 
   expect(model.referencedSchemaTypes).toEqual([
     { schema: "public", typeName: "Mood" },
+  ]);
+});
+
+test("it records enum array schema references when enumArrayType is array", () => {
+  const model = generateModel(
+    {
+      name: "User",
+      fields: [
+        {
+          name: "permissions",
+          isId: false,
+          isGenerated: false,
+          kind: "enum",
+          type: "Permission",
+          hasDefaultValue: false,
+          isList: true,
+          isReadOnly: false,
+          isRequired: true,
+          isUnique: false,
+        },
+      ],
+      schema: null,
+      primaryKey: null,
+      dbName: null,
+      uniqueFields: [],
+      uniqueIndexes: [],
+    },
+    {
+      databaseProvider: "postgresql",
+      fileName: "",
+      enumFileName: "",
+      camelCase: false,
+      readOnlyIds: false,
+      groupBySchema: false,
+      schemaGrouping: "exports",
+      enumArrayType: "array",
+      defaultSchema: "public",
+      dbTypeName: "DB",
+      importExtension: "",
+      exportWrappedTypes: false,
+    },
+    {
+      schemaGrouping: "exports",
+      defaultSchema: "public",
+      multiSchemaMap: new Map([
+        ["User", "users"],
+        ["Permission", "auth"],
+      ]),
+    }
+  );
+
+  const source = stringifyTsNode(model.definition);
+
+  expect(source).toContain("permissions: Auth.Permission[];");
+  expect(model.referencedSchemaTypes).toEqual([
+    { schema: "auth", typeName: "Permission" },
   ]);
 });
