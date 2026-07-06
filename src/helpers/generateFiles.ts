@@ -12,7 +12,6 @@ type File = { filepath: string; content: ReturnType<typeof generateFile> };
 type MultiDefsModelType = Omit<ModelType, "definition"> & {
   definitions: ts.TypeAliasDeclaration[];
 };
-const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
 
 /**
  * Creates the generated output files for the configured layout.
@@ -166,6 +165,7 @@ function generateSchemaExportFiles(
   }
 
   const schemaNames = [...schemaGroups.keys()];
+  const schemaKyselyTypeExports = getSchemaKyselyTypeExports(schemaGroups);
   const indexFile: File = {
     filepath: indexFilepath,
     content: generateFile([...defaultStatements, opts.databaseType], {
@@ -173,7 +173,7 @@ function generateSchemaExportFiles(
       withLeader: true,
       exportWrappedTypes: opts.exportWrappedTypes,
       banner: opts.banner,
-      withKyselyTypeExports: true,
+      kyselyTypeExports: schemaKyselyTypeExports,
       extraHeader: schemaNames.flatMap((schema) => {
         const namespace = capitalize(schema);
         const importPath = `./${getSchemaFileName(schema)}${opts.importExtension}`;
@@ -190,10 +190,7 @@ function generateSchemaExportFiles(
   const schemaFiles: File[] = schemaNames.map((schema) => {
     const imports = schemaImports.get(schema);
     const group = schemaGroups.get(schema) ?? [];
-    const indexHelperImports = getIndexHelperImports(
-      group,
-      opts.exportWrappedTypes
-    );
+    const indexHelperImports = getIndexHelperImports(group);
     const extraHeader = [
       ...(opts.banner ? [opts.banner] : []),
       // Split schema files intentionally type-import helpers from the entrypoint to avoid exporting duplicate utilities.
@@ -231,39 +228,72 @@ function generateSchemaExportFiles(
 }
 
 /**
- * Imports only helpers referenced by the schema file to avoid collisions with user model names.
+ * Imports only helpers referenced by the schema file to keep split output small.
  */
-function getIndexHelperImports(
-  statements: ts.Statement[],
-  exportWrappedTypes: boolean
-) {
-  const source = printStatements(statements);
+function getIndexHelperImports(statements: ts.Statement[]) {
   const imports = new Set<string>();
 
-  if (source.includes("Generated<")) imports.add("Generated");
-  if (source.includes("GeneratedAlways<")) imports.add("GeneratedAlways");
-  if (source.includes("Timestamp")) imports.add("Timestamp");
-
-  if (exportWrappedTypes) {
-    imports.add("Insertable");
-    imports.add("Selectable");
-    imports.add("Updateable");
+  if (usesTypeReference(statements, "Generated")) imports.add("Generated");
+  if (usesTypeReference(statements, "GeneratedAlways")) {
+    imports.add("GeneratedAlways");
   }
+  if (usesTypeReference(statements, "Timestamp")) imports.add("Timestamp");
+  if (usesTypeReference(statements, "Insertable")) imports.add("Insertable");
+  if (usesTypeReference(statements, "Selectable")) imports.add("Selectable");
+  if (usesTypeReference(statements, "Updateable")) imports.add("Updateable");
 
   return [...imports].sort();
 }
 
 /**
- * Prints a statement group so split-file imports can be derived before final file rendering.
+ * Detects helper usage from type references instead of raw text to avoid local declaration collisions.
  */
-function printStatements(statements: ts.Statement[]) {
-  return printer.printFile(
-    ts.factory.createSourceFile(
-      statements,
-      ts.factory.createToken(ts.SyntaxKind.EndOfFileToken),
-      ts.NodeFlags.None
-    )
-  );
+function usesTypeReference(statements: ts.Statement[], typeName: string) {
+  let found = false;
+
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+
+    if (
+      ts.isTypeReferenceNode(node) &&
+      ts.isIdentifier(node.typeName) &&
+      node.typeName.text === typeName
+    ) {
+      found = true;
+      return;
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  for (const statement of statements) {
+    visit(statement);
+    if (found) break;
+  }
+
+  return found;
+}
+
+/**
+ * Re-exports only Kysely helpers needed by schema-file imports.
+ */
+function getSchemaKyselyTypeExports(schemaGroups: Map<string, ts.Statement[]>) {
+  const exports = new Set<string>();
+
+  for (const statements of schemaGroups.values()) {
+    for (const helper of getIndexHelperImports(statements)) {
+      if (
+        helper === "GeneratedAlways" ||
+        helper === "Insertable" ||
+        helper === "Selectable" ||
+        helper === "Updateable"
+      ) {
+        exports.add(helper);
+      }
+    }
+  }
+
+  return [...exports].sort();
 }
 
 /**

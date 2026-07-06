@@ -138,9 +138,7 @@ test("generates schema export files for schemaGrouping exports", () => {
 
   expect(indexFile).toContain('import type * as Mammals from "./mammals.ts";');
   expect(indexFile).toContain('export * as Mammals from "./mammals.ts";');
-  expect(indexFile).toContain(
-    'export type { GeneratedAlways, Insertable, Selectable, Updateable } from "kysely";'
-  );
+  expect(indexFile).not.toContain("export type { GeneratedAlways");
   expect(indexFile).toContain('import type * as World from "./world.ts";');
   expect(indexFile).toContain('export * as World from "./world.ts";');
   expect(indexFile).toContain(
@@ -223,6 +221,26 @@ test("preserves banner content in exports mode schema files", () => {
   expect(
     files[1].content.startsWith("import type { Decimal } from 'decimal.js';")
   ).toEqual(true);
+});
+
+test("does not import Timestamp helper for local Timestamp declarations", () => {
+  const files = generateFiles({
+    typesOutfile: "types.ts",
+    enums: [createEnum("Timestamp", "mammals")],
+    models: [],
+    enumNames: ["Timestamp"],
+    enumsOutfile: "types.ts",
+    databaseType: createType("DB"),
+    schemaGrouping: "exports",
+    defaultSchema: "public",
+    importExtension: "",
+    exportWrappedTypes: false,
+  });
+
+  expect(files[1].content).toContain("export type Timestamp =");
+  expect(files[1].content).not.toContain(
+    'import type { Timestamp } from "./index";'
+  );
 });
 
 test("keeps separate enum files when schemaGrouping is none", () => {
