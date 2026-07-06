@@ -39,6 +39,7 @@ test("it respects camelCase option names", () => {
     [
       { tableName: "book_mark", typeName: "Bookmark" },
       { tableName: "session", typeName: "Session" },
+      { tableName: "TEST_CUSTOMERS", typeName: "Customer" },
       { tableName: "user_table", typeName: "User" },
     ],
     {
@@ -61,6 +62,7 @@ test("it respects camelCase option names", () => {
   expect(result).toEqual(`export type DB = {
     bookMark: Bookmark;
     session: Session;
+    testCustomers: Customer;
     userTable: User;
 };`);
 });

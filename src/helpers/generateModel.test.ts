@@ -152,6 +152,19 @@ test("it respects camelCase option", () => {
           isRequired: false,
           isUnique: false,
         },
+        {
+          name: "updatedAt",
+          dbName: "UPDATED_AT",
+          isId: false,
+          isGenerated: false,
+          kind: "scalar",
+          type: "DateTime",
+          hasDefaultValue: false,
+          isList: false,
+          isReadOnly: false,
+          isRequired: true,
+          isUnique: false,
+        },
       ],
       schema: null,
       primaryKey: null,
@@ -187,6 +200,7 @@ test("it respects camelCase option", () => {
   expect(source).toEqual(`export type User = {
     id: string;
     userName: string | null;
+    updatedAt: string;
 };`);
 });
 
