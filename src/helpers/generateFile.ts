@@ -8,6 +8,7 @@ type Options = {
   exportWrappedTypes: boolean;
   banner?: string;
   extraHeader?: string[];
+  withKyselyTypeExports?: boolean;
 };
 
 /**
@@ -21,6 +22,7 @@ export const generateFile = (
     exportWrappedTypes,
     banner,
     extraHeader,
+    withKyselyTypeExports,
   }: Options
 ) => {
   const file = ts.factory.createSourceFile(
@@ -31,12 +33,16 @@ export const generateFile = (
 
   const result = printer.printFile(file);
 
+  const kyselyTypeExports = withKyselyTypeExports
+    ? 'export type { GeneratedAlways, Insertable, Selectable, Updateable } from "kysely";\n'
+    : "";
+
   const leader = `${banner ? `${banner}\n` : ""}import type { ColumnType${
     result.includes("GeneratedAlways") ? ", GeneratedAlways" : ""
   }${
     exportWrappedTypes ? ", Insertable, Selectable, Updateable" : ""
   } } from "kysely";
-export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+${kyselyTypeExports}export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;`;

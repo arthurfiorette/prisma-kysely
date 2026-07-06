@@ -992,6 +992,9 @@ enum Color {
 };`);
 
   expect(mammalsFile).toContain("export const Color = {");
+  expect(mammalsFile).toContain(
+    'import type { Generated, Insertable, Selectable, Updateable } from "./index.ts";'
+  );
   expect(mammalsFile).toContain("color: Color;");
   expect(mammalsFile).toContain(
     "export type Elephant = Selectable<ElephantTable>;"
@@ -1005,6 +1008,8 @@ enum Color {
   expect(mammalsFile).toContain('import type * as World from "./world.ts";');
   expect(mammalsFile).toContain("ability: Generated<World.Ability>;");
   expect(mammalsFile).not.toContain("export namespace Mammals");
+  expect(mammalsFile).not.toContain("export type Generated<T>");
+  expect(mammalsFile).not.toContain("export type Timestamp");
 
   expect(birdsFile).toContain('import type * as World from "./world.ts";');
   expect(birdsFile).toContain("export type EagleTable = {");

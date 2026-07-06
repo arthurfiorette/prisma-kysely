@@ -12,6 +12,7 @@ type File = { filepath: string; content: ReturnType<typeof generateFile> };
 type MultiDefsModelType = Omit<ModelType, "definition"> & {
   definitions: ts.TypeAliasDeclaration[];
 };
+const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
 
 /**
  * Creates the generated output files for the configured layout.
@@ -172,6 +173,7 @@ function generateSchemaExportFiles(
       withLeader: true,
       exportWrappedTypes: opts.exportWrappedTypes,
       banner: opts.banner,
+      withKyselyTypeExports: true,
       extraHeader: schemaNames.flatMap((schema) => {
         const namespace = capitalize(schema);
         const importPath = `./${getSchemaFileName(schema)}${opts.importExtension}`;
@@ -187,7 +189,19 @@ function generateSchemaExportFiles(
 
   const schemaFiles: File[] = schemaNames.map((schema) => {
     const imports = schemaImports.get(schema);
+    const group = schemaGroups.get(schema) ?? [];
+    const indexHelperImports = getIndexHelperImports(
+      group,
+      opts.exportWrappedTypes
+    );
     const extraHeader = [
+      ...(opts.banner ? [opts.banner] : []),
+      // Split schema files intentionally type-import helpers from the entrypoint to avoid exporting duplicate utilities.
+      ...(indexHelperImports.length
+        ? [
+            `import type { ${indexHelperImports.join(", ")} } from "./index${opts.importExtension}";`,
+          ]
+        : []),
       ...(imports?.defaultTypes.size
         ? [
             `import type { ${[...imports.defaultTypes].sort().join(", ")} } from "./index${opts.importExtension}";`,
@@ -203,9 +217,9 @@ function generateSchemaExportFiles(
 
     return {
       filepath: path.join(schemaDir, `${getSchemaFileName(schema)}.ts`),
-      content: generateFile(schemaGroups.get(schema) ?? [], {
+      content: generateFile(group, {
         withEnumImport: false,
-        withLeader: true,
+        withLeader: false,
         exportWrappedTypes: opts.exportWrappedTypes,
         banner: opts.banner,
         extraHeader,
@@ -214,6 +228,42 @@ function generateSchemaExportFiles(
   });
 
   return [indexFile, ...schemaFiles];
+}
+
+/**
+ * Imports only helpers referenced by the schema file to avoid collisions with user model names.
+ */
+function getIndexHelperImports(
+  statements: ts.Statement[],
+  exportWrappedTypes: boolean
+) {
+  const source = printStatements(statements);
+  const imports = new Set<string>();
+
+  if (source.includes("Generated<")) imports.add("Generated");
+  if (source.includes("GeneratedAlways<")) imports.add("GeneratedAlways");
+  if (source.includes("Timestamp")) imports.add("Timestamp");
+
+  if (exportWrappedTypes) {
+    imports.add("Insertable");
+    imports.add("Selectable");
+    imports.add("Updateable");
+  }
+
+  return [...imports].sort();
+}
+
+/**
+ * Prints a statement group so split-file imports can be derived before final file rendering.
+ */
+function printStatements(statements: ts.Statement[]) {
+  return printer.printFile(
+    ts.factory.createSourceFile(
+      statements,
+      ts.factory.createToken(ts.SyntaxKind.EndOfFileToken),
+      ts.NodeFlags.None
+    )
+  );
 }
 
 /**

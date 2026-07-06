@@ -138,16 +138,22 @@ test("generates schema export files for schemaGrouping exports", () => {
 
   expect(indexFile).toContain('import type * as Mammals from "./mammals.ts";');
   expect(indexFile).toContain('export * as Mammals from "./mammals.ts";');
+  expect(indexFile).toContain(
+    'export type { GeneratedAlways, Insertable, Selectable, Updateable } from "kysely";'
+  );
   expect(indexFile).toContain('import type * as World from "./world.ts";');
   expect(indexFile).toContain('export * as World from "./world.ts";');
   expect(indexFile).toContain(
     'export type DB = {\n    "mammals.elephants": Mammals.Elephant;\n};'
   );
   expect(mammalsFile).toContain('import type { Mood } from "./index.ts";');
+  expect(mammalsFile).not.toContain("ColumnType");
   expect(mammalsFile).toContain('import type * as World from "./world.ts";');
   expect(mammalsFile).toContain("color: Color;");
   expect(mammalsFile).toContain("ability: World.Ability;");
   expect(mammalsFile).not.toContain("export namespace Mammals");
+  expect(mammalsFile).not.toContain("export type Generated<T>");
+  expect(mammalsFile).not.toContain("export type Timestamp");
 });
 
 test("resolves exports mode index paths from configured type filenames", () => {
@@ -197,6 +203,26 @@ test("avoids colliding with the entrypoint for schemas named index", () => {
   expect(files[0].content).toContain(
     'export * as Index from "./index.schema.ts";'
   );
+});
+
+test("preserves banner content in exports mode schema files", () => {
+  const files = generateFiles({
+    typesOutfile: "types.ts",
+    enums: [createEnum("Color", "mammals")],
+    models: [],
+    enumNames: ["Color"],
+    enumsOutfile: "types.ts",
+    databaseType: createType("DB"),
+    schemaGrouping: "exports",
+    defaultSchema: "public",
+    importExtension: "",
+    exportWrappedTypes: false,
+    banner: "import type { Decimal } from 'decimal.js';",
+  });
+
+  expect(
+    files[1].content.startsWith("import type { Decimal } from 'decimal.js';")
+  ).toEqual(true);
 });
 
 test("keeps separate enum files when schemaGrouping is none", () => {

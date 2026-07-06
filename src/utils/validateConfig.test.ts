@@ -58,12 +58,14 @@ test("preserves explicit schemaGrouping over legacy groupBySchema", () => {
 });
 
 test("permits enumFileName with grouped schema modes", () => {
-  const result = configValidator.parse({
-    databaseProvider: "postgresql",
-    fileName: "types.ts",
-    enumFileName: "enums.ts",
-    schemaGrouping: "namespace",
-  });
+  for (const schemaGrouping of ["namespace", "exports"] as const) {
+    const result = configValidator.parse({
+      databaseProvider: "postgresql",
+      fileName: "types.ts",
+      enumFileName: "enums.ts",
+      schemaGrouping,
+    });
 
-  expect(result.enumFileName).toEqual("enums.ts");
+    expect(result.enumFileName).toEqual("enums.ts");
+  }
 });
