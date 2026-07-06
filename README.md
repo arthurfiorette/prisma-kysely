@@ -152,6 +152,8 @@ to `types/index.ts` with schema files beside it, such as `types/animals.ts`:
 
 ```ts
 // types/index.ts
+import type * as Animals from "./animals";
+
 export * as Animals from "./animals";
 
 export type DB = {
