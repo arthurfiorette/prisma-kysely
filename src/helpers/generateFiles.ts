@@ -13,6 +13,9 @@ type MultiDefsModelType = Omit<ModelType, "definition"> & {
   definitions: ts.TypeAliasDeclaration[];
 };
 
+/**
+ * Creates the generated output files for the configured layout.
+ */
 export function generateFiles(opts: {
   typesOutfile: string;
   enums: EnumType[];
@@ -20,7 +23,7 @@ export function generateFiles(opts: {
   enumNames: string[];
   enumsOutfile: string;
   databaseType: TypeAliasDeclaration;
-  groupBySchema: boolean;
+  schemaGrouping: "none" | "namespace" | "exports";
   defaultSchema: string;
   importExtension: string;
   exportWrappedTypes: boolean;
@@ -35,11 +38,22 @@ export function generateFiles(opts: {
     })
   );
 
-  // Don't generate a separate file for enums if there are no enums
-  if (opts.enumsOutfile === opts.typesOutfile || opts.enums.length === 0) {
+  if (opts.schemaGrouping === "exports") {
+    return generateSchemaExportFiles({
+      ...opts,
+      models,
+    });
+  }
+
+  // Grouped output owns enum placement so enumFileName cannot split schemas across incompatible files.
+  if (
+    opts.schemaGrouping !== "none" ||
+    opts.enumsOutfile === opts.typesOutfile ||
+    opts.enums.length === 0
+  ) {
     let statements: Iterable<ts.Statement>;
 
-    if (!opts.groupBySchema) {
+    if (opts.schemaGrouping === "none") {
       statements = [
         ...opts.enums.flatMap((e) => [e.objectDeclaration, e.typeDeclaration]),
         ...models.flatMap((m) => m.definitions),
@@ -95,6 +109,156 @@ export function generateFiles(opts: {
   return [typesFileWithoutEnums, enumFile];
 }
 
+/**
+ * Splits grouped schemas into standalone files while keeping the index usable as the DB entrypoint.
+ */
+function generateSchemaExportFiles(
+  opts: Omit<Parameters<typeof generateFiles>[0], "models"> & {
+    models: MultiDefsModelType[];
+  }
+): File[] {
+  const { indexFilepath, schemaDir } = getSchemaExportPaths(opts.typesOutfile);
+  const defaultStatements: ts.Statement[] = [];
+  const schemaGroups = new Map<string, ts.Statement[]>();
+  const schemaImports = new Map<
+    string,
+    { namespaces: Set<string>; defaultTypes: Set<string> }
+  >();
+
+  for (const enumType of opts.enums) {
+    if (!enumType.schema || enumType.schema === opts.defaultSchema) {
+      defaultStatements.push(
+        enumType.objectDeclaration,
+        enumType.typeDeclaration
+      );
+      continue;
+    }
+
+    getOrSet(schemaGroups, enumType.schema, []).push(
+      enumType.objectDeclaration,
+      enumType.typeDeclaration
+    );
+  }
+
+  for (const model of opts.models) {
+    if (!model.schema || model.schema === opts.defaultSchema) {
+      defaultStatements.push(...model.definitions);
+      continue;
+    }
+
+    getOrSet(schemaGroups, model.schema, []).push(...model.definitions);
+
+    const imports = getOrSet(schemaImports, model.schema, {
+      namespaces: new Set<string>(),
+      defaultTypes: new Set<string>(),
+    });
+
+    for (const referencedType of model.referencedSchemaTypes) {
+      if (referencedType.schema === model.schema) continue;
+
+      if (referencedType.schema === opts.defaultSchema) {
+        imports.defaultTypes.add(referencedType.typeName);
+      } else {
+        imports.namespaces.add(referencedType.schema);
+      }
+    }
+  }
+
+  const schemaNames = [...schemaGroups.keys()];
+  const indexFile: File = {
+    filepath: indexFilepath,
+    content: generateFile([...defaultStatements, opts.databaseType], {
+      withEnumImport: false,
+      withLeader: true,
+      exportWrappedTypes: opts.exportWrappedTypes,
+      banner: opts.banner,
+      extraHeader: schemaNames.flatMap((schema) => {
+        const namespace = capitalize(schema);
+        const importPath = `./${getSchemaFileName(schema)}${opts.importExtension}`;
+
+        // The import gives DB a local namespace type; the export keeps the public API requested by schemaGrouping=exports.
+        return [
+          `import type * as ${namespace} from "${importPath}";`,
+          `export * as ${namespace} from "${importPath}";`,
+        ];
+      }),
+    }),
+  };
+
+  const schemaFiles: File[] = schemaNames.map((schema) => {
+    const imports = schemaImports.get(schema);
+    const extraHeader = [
+      ...(imports?.defaultTypes.size
+        ? [
+            `import type { ${[...imports.defaultTypes].sort().join(", ")} } from "./index${opts.importExtension}";`,
+          ]
+        : []),
+      ...[...(imports?.namespaces ?? [])]
+        .sort()
+        .map(
+          (referencedSchema) =>
+            `import type * as ${capitalize(referencedSchema)} from "./${getSchemaFileName(referencedSchema)}${opts.importExtension}";`
+        ),
+    ];
+
+    return {
+      filepath: path.join(schemaDir, `${getSchemaFileName(schema)}.ts`),
+      content: generateFile(schemaGroups.get(schema) ?? [], {
+        withEnumImport: false,
+        withLeader: true,
+        exportWrappedTypes: opts.exportWrappedTypes,
+        banner: opts.banner,
+        extraHeader,
+      }),
+    };
+  });
+
+  return [indexFile, ...schemaFiles];
+}
+
+/**
+ * Avoids clobbering the exports-mode entrypoint when a database schema is named `index`.
+ */
+function getSchemaFileName(schema: string) {
+  return schema === "index" ? "index.schema" : schema;
+}
+
+/**
+ * Resolves option B paths where a configured types file becomes a directory index in exports mode.
+ */
+function getSchemaExportPaths(typesOutfile: string) {
+  const parsed = path.parse(typesOutfile);
+
+  if (parsed.name === "index") {
+    return {
+      indexFilepath: typesOutfile,
+      schemaDir: parsed.dir,
+    };
+  }
+
+  const schemaDir = path.join(parsed.dir, parsed.name);
+
+  return {
+    indexFilepath: path.join(schemaDir, `index${parsed.ext || ".ts"}`),
+    schemaDir,
+  };
+}
+
+/**
+ * Returns an existing map value or stores the provided empty collection for incremental grouping.
+ */
+function getOrSet<K, V>(map: Map<K, V>, key: K, value: V) {
+  const existing = map.get(key);
+
+  if (existing) return existing;
+
+  map.set(key, value);
+  return value;
+}
+
+/**
+ * Groups non-default schema declarations under TypeScript namespaces for the legacy layout.
+ */
 export function* groupModelsAndEnum(
   enums: EnumType[],
   models: MultiDefsModelType[],

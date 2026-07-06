@@ -96,13 +96,14 @@ test("it generates a model!", () => {
       camelCase: false,
       readOnlyIds: false,
       groupBySchema: false,
+      schemaGrouping: "none",
       defaultSchema: "public",
       dbTypeName: "DB",
       importExtension: "",
       exportWrappedTypes: false,
     },
     {
-      groupBySchema: false,
+      schemaGrouping: "none",
       defaultSchema: "public",
     }
   );
@@ -164,13 +165,14 @@ test("it respects camelCase option", () => {
       camelCase: true,
       readOnlyIds: false,
       groupBySchema: false,
+      schemaGrouping: "none",
       defaultSchema: "public",
       dbTypeName: "DB",
       importExtension: "",
       exportWrappedTypes: false,
     },
     {
-      groupBySchema: false,
+      schemaGrouping: "none",
       defaultSchema: "public",
     }
   );
@@ -241,13 +243,14 @@ test("it types enum arrays as strings (#107)", () => {
       camelCase: false,
       readOnlyIds: false,
       groupBySchema: false,
+      schemaGrouping: "none",
       defaultSchema: "public",
       dbTypeName: "DB",
       importExtension: "",
       exportWrappedTypes: false,
     },
     {
-      groupBySchema: false,
+      schemaGrouping: "none",
       defaultSchema: "public",
     }
   );
@@ -262,4 +265,56 @@ test("it types enum arrays as strings (#107)", () => {
     role: Role;
     permissions: string;
 };`);
+});
+
+test("it records missing-schema enum references as default schema references", () => {
+  const model = generateModel(
+    {
+      name: "User",
+      fields: [
+        {
+          name: "mood",
+          isId: false,
+          isGenerated: false,
+          kind: "enum",
+          type: "Mood",
+          hasDefaultValue: false,
+          isList: false,
+          isReadOnly: false,
+          isRequired: true,
+          isUnique: false,
+        },
+      ],
+      schema: null,
+      primaryKey: null,
+      dbName: null,
+      uniqueFields: [],
+      uniqueIndexes: [],
+    },
+    {
+      databaseProvider: "postgresql",
+      fileName: "",
+      enumFileName: "",
+      camelCase: false,
+      readOnlyIds: false,
+      groupBySchema: false,
+      schemaGrouping: "exports",
+      defaultSchema: "public",
+      dbTypeName: "DB",
+      importExtension: "",
+      exportWrappedTypes: false,
+    },
+    {
+      schemaGrouping: "exports",
+      defaultSchema: "public",
+      multiSchemaMap: new Map([
+        ["User", "animals"],
+        ["Mood", ""],
+      ]),
+    }
+  );
+
+  expect(model.referencedSchemaTypes).toEqual([
+    { schema: "public", typeName: "Mood" },
+  ]);
 });

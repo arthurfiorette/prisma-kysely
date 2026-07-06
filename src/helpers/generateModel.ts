@@ -19,20 +19,32 @@ export type ModelType = {
   typeName: string;
   tableName: string;
   definition: ts.TypeAliasDeclaration;
+  referencedSchemas: string[];
+  referencedSchemaTypes: { schema: string; typeName: string }[];
   schema?: string;
 };
 
 export type GenerateModelOptions = {
-  groupBySchema: boolean;
+  schemaGrouping: "none" | "namespace" | "exports";
   defaultSchema: string;
   multiSchemaMap?: Map<string, string>;
 };
 
+/**
+ * Generates a Kysely table type and records schema references needed by split-file output.
+ */
 export const generateModel = (
   model: DMMF.Model,
   config: Config,
-  { defaultSchema, groupBySchema, multiSchemaMap }: GenerateModelOptions
+  { defaultSchema, schemaGrouping, multiSchemaMap }: GenerateModelOptions
 ): ModelType => {
+  const referencedSchemas = new Set<string>();
+  const referencedSchemaTypes = new Map<
+    string,
+    { schema: string; typeName: string }
+  >();
+  const modelSchema = multiSchemaMap?.get(model.name) || defaultSchema;
+
   const properties = model.fields.flatMap((field) => {
     const isGenerated =
       field.hasDefaultValue &&
@@ -50,7 +62,11 @@ export const generateModel = (
 
     const dbName = typeof field.dbName === "string" ? field.dbName : null;
 
-    const schemaPrefix = groupBySchema && multiSchemaMap?.get(field.type);
+    const fieldSchema = multiSchemaMap?.get(field.type);
+    const schemaPrefix =
+      schemaGrouping !== "none" && fieldSchema !== undefined
+        ? fieldSchema || defaultSchema
+        : false;
 
     if (field.kind === "enum") {
       // Of the SQL providers prisma-kysely supports, only PostgreSQL and
@@ -65,6 +81,17 @@ export const generateModel = (
       // See https://github.com/valtyr/prisma-kysely/issues/107
       const isEnumArray = field.isList;
 
+      if (!isEnumArray && schemaPrefix) {
+        if (defaultSchema !== schemaPrefix) {
+          referencedSchemas.add(schemaPrefix);
+        }
+
+        referencedSchemaTypes.set(`${schemaPrefix}.${field.type}`, {
+          schema: schemaPrefix,
+          typeName: field.type,
+        });
+      }
+
       return generateField({
         isId: field.isId,
         name: normalizeCase(dbName || field.name, config),
@@ -72,7 +99,11 @@ export const generateModel = (
           ? ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword)
           : ts.factory.createTypeReferenceNode(
               ts.factory.createIdentifier(
-                schemaPrefix && defaultSchema !== schemaPrefix
+                // Split schema files define same-schema enums locally; namespace mode still needs the namespace qualifier.
+                schemaPrefix &&
+                  defaultSchema !== schemaPrefix &&
+                  (schemaGrouping === "namespace" ||
+                    schemaPrefix !== modelSchema)
                   ? `${capitalize(schemaPrefix)}.${field.type}`
                   : field.type
               ),
@@ -106,6 +137,8 @@ export const generateModel = (
   return {
     typeName: model.name,
     tableName: model.dbName || model.name,
+    referencedSchemas: [...referencedSchemas],
+    referencedSchemaTypes: [...referencedSchemaTypes.values()],
     definition: ts.factory.createTypeAliasDeclaration(
       [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
       ts.factory.createIdentifier(model.name),
