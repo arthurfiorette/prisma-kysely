@@ -1,5 +1,37 @@
 # prisma-kysely
 
+## 3.2.0
+
+### Minor Changes
+
+- c4af420: Add `enumArrayType` to control how Prisma enum-array fields are generated.
+
+  The new default is `enumArrayType = "array"`, which emits enum arrays as the corresponding TypeScript enum union array, for example `Permission[]`. This is the most useful type when the application registers PostgreSQL enum-array parsers with `pg`, because query results then contain real JavaScript arrays instead of raw PostgreSQL array literal strings.
+
+  For applications that rely on the default `pg` behavior for user-defined enum arrays, `enumArrayType = "string"` preserves the previous safer output. In that mode an enum-array column is typed as `string`, matching raw values such as `{FOO,BAR}` or `{}` returned by `pg` when no parser is registered for the enum array OID.
+
+  This makes the behavior explicit instead of forcing one runtime assumption on every project. Projects with enum-array parser registration can use precise array types, while projects without parser registration can keep the raw-string typing introduced for the PostgreSQL enum-array parsing limitation described in `node-pg-types` issue 56.
+
+  The generator also tracks schema references for enum arrays when `enumArrayType = "array"`, so split schema output can import cross-schema enum-array types correctly in `schemaGrouping = "exports"` mode.
+
+- c4af420: Add `schemaGrouping` as the new schema grouping control, with `"none"`, `"namespace"`, and `"exports"` modes.
+
+  `schemaGrouping = "namespace"` keeps the existing single-file namespace output, where non-default schemas are emitted as TypeScript namespaces and database table references use names such as `Animals.Dog`. Existing users of `groupBySchema = true` continue to get this behavior because `groupBySchema` is now treated as a legacy alias for `schemaGrouping = "namespace"`.
+
+  `schemaGrouping = "exports"` adds a split-file output mode for multi-schema projects. When `fileName = "types.ts"`, the generator now writes `types/index.ts` plus one file per non-default schema, such as `types/animals.ts`. The index file still exports the main `DB` type and exposes each schema through namespace-style module exports, for example `export * as Animals from "./animals"`. This preserves the ergonomic `Animals.Dog` type shape while avoiding TypeScript namespace declarations in generated code.
+
+  The split-file mode keeps default-schema declarations in the index file and writes non-default schema declarations as normal exported types in their schema file. Cross-schema enum references are imported between schema files, and schema files import shared generated helpers such as `Generated` and `Timestamp` from the index instead of redefining those helpers in every file.
+
+  Grouped modes now own enum placement, so `enumFileName` is ignored when `schemaGrouping` is `"namespace"` or `"exports"`. This avoids splitting schema-owned declarations into incompatible files and keeps grouped output self-contained.
+
+### Patch Changes
+
+- b05aea3: Fix `camelCase = true` for all-uppercase mapped table and column names.
+
+  Previously names such as `UPDATED_AT`, `ID`, or `TEST_CUSTOMERS` could be emitted as `UPDATEDAT`, `ID`, and `TESTCUSTOMERS` because the camel-case mapper preserved uppercase segments instead of normalizing all-uppercase snake-case identifiers first. This affected schemas that map database names with uppercase conventions through Prisma `@map` and `@@map`.
+
+  The generator now treats all-uppercase snake-case names as database identifiers that should be lowercased before camel-case conversion. With `camelCase = true`, `UPDATED_AT` becomes `updatedAt`, `ID` becomes `id`, and `TEST_CUSTOMERS` becomes `testCustomers`, matching the behavior users expect from Kysely's camel case plugin.
+
 ## 3.1.1
 
 ### Patch Changes
